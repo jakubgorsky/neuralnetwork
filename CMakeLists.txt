@@ -3,9 +3,13 @@ project(NeuralNetwork)
 
 set(CMAKE_CXX_STANDARD 14)
 
-set(HEADER_FILES)
+include_directories("C:\\libs\\eigen-3.4.0")
+
+set(HEADER_FILES
+        headers/NeuralNetwork.h)
 
 set(SOURCE_FILES
+        src/NeuralNetwork.cpp
         src/main.cpp)
 
-add_executable(NeuralNetwork src/main.cpp)
+add_executable(NeuralNetwork ${SOURCE_FILES} ${HEADER_FILES})
