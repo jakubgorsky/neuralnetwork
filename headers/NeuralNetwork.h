@@ -5,31 +5,23 @@
 #ifndef NEURALNETWORK_NEURALNETWORK_H
 #define NEURALNETWORK_NEURALNETWORK_H
 
-#include <Eigen/Eigen>
 #include <iostream>
 #include <vector>
+#include <fstream>
+#include "../headers/Neuron.h"
 
-typedef float Scalar;
-typedef Eigen::MatrixXf Matrix;
-typedef Eigen::RowVectorXf RowVector;
-typedef Eigen::VectorXf ColVector;
+typedef std::vector<Neuron> Layer;
 
-class NeuralNetwork {
+class Net {
 public:
-    NeuralNetwork(std::vector<unsigned int> topology, Scalar learningRate = Scalar(0.005));
-
-    void propagateForward(RowVector& input);
-    void propagateBackward(RowVector& output);
-    void calcErrors(RowVector& output);
-    void UpdateWeights();
-    void train(std::vector<RowVector*> input, std::vector<RowVector*> output);
-
-    std::vector<unsigned int> m_Topology;
-    std::vector<RowVector*> neuronLayers;
-    std::vector<RowVector*> cacheLayers;
-    std::vector<RowVector*> deltas;
-    std::vector<Matrix*> weights;
-    Scalar learningRate;
+    Net(const std::vector<unsigned int> &topology);
+    void feedForward(const std::vector<double> &inputVals);
+    void backProp(const std::vector<double> &targetVals);
+    void getResults(std::vector<double> &resultVals) const;
+    double getRecentAverageError() const { return m_recentAverageError; }
+private:
+    std::vector<Layer> m_layers;
+    double m_error{}, m_recentAverageError{};
 };
 
 #endif //NEURALNETWORK_NEURALNETWORK_H

@@ -2,93 +2,76 @@
 // Created by Jakub Górski on 16/08/2022.
 //
 
+
+#include <cassert>
 #include "../headers/NeuralNetwork.h"
 
-Scalar activationFunction(Scalar x){
-    return tanhf(x);
-}
+Net::Net(const std::vector<unsigned int> &topology) {
+    unsigned int numLayers = topology.size();
+    for (unsigned int layerNum = 0; layerNum < numLayers; ++layerNum){
+        m_layers.emplace_back();
+        unsigned numOutputs = layerNum == topology.size() - 1 ? 0 : topology[layerNum + 1];
 
-Scalar activationFunctionDerivative(Scalar x){
-    return 1 - tanhf(x) * tanhf(x);
-}
-
-NeuralNetwork::NeuralNetwork(std::vector<unsigned int> topology, Scalar learningRate)
-    : m_Topology(topology), learningRate(learningRate){
-    for (unsigned int i = 0; i < m_Topology.size(); i++){
-        if (i == m_Topology.size() - 1)
-            neuronLayers.push_back(new RowVector(m_Topology[i]));
-        else
-            neuronLayers.push_back(new RowVector(m_Topology[i]+1));
-        cacheLayers.push_back(new RowVector(neuronLayers.size()));
-        deltas.push_back(new RowVector(neuronLayers.size()));
-
-        if (i != topology.size()){
-            neuronLayers.back()->coeffRef(m_Topology[i]) = 1.0;
-            cacheLayers.back()->coeffRef(m_Topology[i]) = 1.0;
+        for (unsigned neuronNum = 0; neuronNum <= topology[layerNum]; ++neuronNum){
+            m_layers.back().push_back(Neuron(numOutputs, neuronNum));
         }
+        m_layers.back().back().setOutputVal(1.0);
+    }
+}
 
-        if (i > 0) {
-            if (i != this->m_Topology.size() - 1) {
-                weights.push_back(new Matrix(m_Topology[i - 1] + 1, m_Topology[i] + 1));
-                weights.back()->setRandom();
-                weights.back()->col(m_Topology[i]).setZero();
-                weights.back()->coeffRef(m_Topology[i - 1], m_Topology[i]) = 1;
-            } else {
-                weights.push_back(new Matrix(m_Topology[i - 1] + 1, m_Topology[i]));
-                weights.back()->setRandom();
-            }
+void Net::feedForward(const std::vector<double> &inputVals) {
+    assert(inputVals.size() == m_layers[0].size() - 1);
+
+    for (unsigned i = 0; i < inputVals.size(); ++i){
+        m_layers[0][i].setOutputVal(inputVals[i]);
+    }
+
+    for (unsigned layerNum = 1; layerNum <= m_layers.size() - 1; ++layerNum){
+        Layer &prevLayer = m_layers[layerNum - 1];
+        for (unsigned n = 0; n < m_layers[layerNum].size() - 1; ++n){
+            m_layers[layerNum][n].feedForward(prevLayer);
         }
     }
 }
 
-void NeuralNetwork::propagateForward(RowVector &input) {
-    neuronLayers.front()->block(0, 0, 1, neuronLayers.front()->size() - 1) = input;
-
-    for (unsigned int i = 1; i < m_Topology.size(); i++){
-        *neuronLayers[i] = *neuronLayers[i - 1] * *weights[i - 1];
-        neuronLayers[i]->block(0, 0, 1, m_Topology[i]).unaryExpr(std::ptr_fun(activationFunction));
+void Net::backProp(const std::vector<double> &targetVals) {
+    Layer &outputLayer = m_layers.back();
+    m_error = 0.0;
+    for (unsigned n = 0; n < outputLayer.size() - 1; ++n) {
+        double delta = targetVals[n] - outputLayer[n].getOutputVal();
+        m_error += delta * delta;
     }
-}
+    m_error /= (double)(outputLayer.size() - 1);
+    m_error = sqrt(m_error);
 
-void NeuralNetwork::propagateBackward(RowVector &output) {
-    calcErrors(output);
-    UpdateWeights();
-}
+    m_recentAverageError = m_recentAverageError + m_error;
 
-void NeuralNetwork::calcErrors(RowVector &output) {
-    *deltas.back() = output - *neuronLayers.back();
-    for (unsigned int i = m_Topology.size() - 2; i > 0; i--){
-        *deltas[i] = *deltas[i + 1] * weights[i]->transpose();
+    for (unsigned n = 0; n < outputLayer.size() - 1; ++n){
+        outputLayer[n].calcOutputGradients(targetVals[n]);
     }
-}
 
-void NeuralNetwork::UpdateWeights() {
-    for (unsigned int i = 0; i < m_Topology.size() - 1; i++){
-        if (i != m_Topology.size() - 2){
-            for (unsigned int c = 0; c < weights[i]->cols() - 1; c++){
-                for (unsigned int r = 0; r < weights[i]->rows(); r++){
-                    weights[i]->coeffRef(r, c) += learningRate * deltas[i + 1]->coeffRef(c) * activationFunctionDerivative(cacheLayers[i + 1]->coeffRef(c)) * neuronLayers[i]->coeffRef(r);
-                }
-            }
+    for (unsigned layerNum = m_layers.size() - 2; layerNum > 0; --layerNum){
+        Layer &hiddenLayer = m_layers[layerNum];
+        Layer &nextLayer = m_layers[layerNum + 1];
+
+        for (auto & n : hiddenLayer){
+            n.calcHiddenGradients(nextLayer);
         }
-        else
-        {
-            for (unsigned int c = 0; c < weights[i]->cols(); c++){
-                for (unsigned int r = 0; r < weights[i]->rows(); r++){
-                    weights[i]->coeffRef(r, c) += learningRate * deltas[i + 1]->coeffRef(c) * activationFunctionDerivative(cacheLayers[i + 1]->coeffRef(c)) * neuronLayers[i]->coeffRef(r);
-                }
-            }
+    }
+
+    for (unsigned layerNum = m_layers.size() - 1; layerNum > 0; --layerNum){
+        Layer &layer = m_layers[layerNum];
+        Layer &prevLayer = m_layers[layerNum - 1];
+        for (unsigned n = 0; n < layer.size() - 1; ++n){
+            layer[n].updateInputWeights(prevLayer);
         }
     }
 }
 
-void NeuralNetwork::train(std::vector<RowVector *> input, std::vector<RowVector*> output) {
-    for (unsigned int i = 0; i < input.size(); i++){
-        std::cout << "Input to neural network: " << *input[i] << std::endl;
-        propagateForward(*input[i]);
-        std::cout << "Expected output: " << *output[i] << std::endl;
-        std::cout << "Produced output: " << *neuronLayers.back() << std::endl;
-        propagateBackward(*output[i]);
-        std::cout << "MSE: " << std::sqrt((*deltas.back()).dot(*deltas.back()) / (float)deltas.back()->size()) << std::endl;
+void Net::getResults(std::vector<double> &resultVals) const {
+    resultVals.clear();
+
+    for (unsigned n = 0; n < m_layers.back().size() - 1; ++n){
+        resultVals.push_back(m_layers.back()[n].getOutputVal());
     }
 }

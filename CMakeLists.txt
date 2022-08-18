@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 14)
 include_directories("C:\\libs\\eigen-3.4.0")
 
 set(HEADER_FILES
-        headers/NeuralNetwork.h)
+        headers/NeuralNetwork.h headers/Neuron.h headers/TrainingData.h)
 
 set(SOURCE_FILES
         src/NeuralNetwork.cpp
